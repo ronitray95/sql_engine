@@ -14,6 +14,65 @@ tableListRows = {}  # map of table rows
 columnData = {}
 keywords = ['select', 'distinct', 'from', 'where', 'group', '', '', '', '', ]
 functions = ['sum', 'count', 'max', 'min', 'avg']
+operators = ['=', '<', '<=', '>', '>=']
+
+
+def verifySQL():
+    if(len(sys.argv) <= 1):
+        print('Insufficient parameters')
+        return False
+    query = ' '.join(sys.argv[1:])
+    query = query.lower()
+    query = query.strip()
+    parsed = sqlparse.parse(query)
+    tokens = parsed[0].tokens
+    isDistinct = False
+    if query.split(' ')[0] != 'select':
+        print('Only select operation is supported')
+        return False
+    if 'from' not in query:
+        print('FROM keyword is absent')
+        return False
+    if query[-1] != ';':
+        print('Query must be terminated by \';\'')
+        return False
+    for t in tokens:
+        if str(t).lower() == 'distinct':
+            isDistinct = True
+    opTables = (8 if isDistinct else 6)
+    opTables = str(tokens[opTables]).split(',')
+    opCols = 4 if isDistinct else 2
+    opCols = str(tokens[opCols]).split(',')
+    if len(opCols) == 0:
+        print('No columns are present')
+        return False
+    if len(opTables) == 0:
+        print('No tables are present')
+        return False
+    aggCols = {}
+    for col in opCols:
+        if '(' not in col:
+            if col != '*' and col not in columnData:
+                print('Unknown column', col)
+                return False
+            if col != '*' and columnData[col].tableName not in opTables:
+                print(f'Column {col} does not belong to any tables')
+                return False
+            continue
+        agg = re.findall('[^( )]+', col)[0]
+        cc = re.findall('[^( )]+', col)[1]
+        opCols.remove(col)
+        if cc != '*' and cc not in columnData:
+            print('Unknown column', cc)
+            return False
+        if cc != '*' and columnData[cc].tableName not in opTables:
+            print(f'Column {cc} does not belong to any tables')
+            return False
+        if agg not in functions:
+            print('Invalid function', agg)
+            return False
+        aggCols[cc] = agg
+    return True
 
 
 def getSQL():
@@ -22,14 +81,14 @@ def getSQL():
         return
     query = ' '.join(sys.argv[1:])
     query = query.lower()
-    print(query)
+    # print(query)
     parsed = sqlparse.parse(query)
     tokens = parsed[0].tokens
     isDistinct = False
     for t in tokens:
         if str(t).lower() == 'distinct':
             isDistinct = True
-        print(t)
+        #print(t)
     opTables = (8 if isDistinct else 6)
     opTables = str(tokens[opTables]).split(',')
     opCols = 4 if isDistinct else 2
@@ -86,25 +145,26 @@ def getSQL():
         for c in tableList[tt].column:
             allColNames.append(c)
     allColumns.insert(0, allColNames)
-    # print(len(allColumns))
-    # for c in allColumns:
-    #     print(c)
+
     # start where evaluation
     if condition is not None:
         if cond2 is None:
             cond1 = cond1.replace(';', '')
-            x1 = re.findall('^[A-Za-z0-9]+', cond1)[0]
-            x2 = re.findall('[A-Za-z0-9]+$', cond1)[0]
-            cname1, cname2 = x1, x2
+            cname1 = re.findall('^[A-Za-z0-9]+', cond1)[0]
+            cname2 = re.findall('[A-Za-z0-9]+$', cond1)[0]
             op = re.findall('[<=>=!]+', cond1)[0]
-            print(cname1, cname2, op)
+
+            if cname1 not in columnData:
+                print('Unknown column', cname1)
+                return False
+            if columnData[cname1].tableName not in opTables:
+                print(f'Column {cname1} does not belong to any tables')
+                return False
+            if op not in operators:
+                print('Invalid operation', op)
+                return False
             ic1 = (allColumns[0]).index(cname1)
-            print(ic1)
-            # ic2 = 0
-            # try:
-            #     ic2 = int(cname2)
-            # except Exception:
-            #     ic2 = (allColumns[0]).index(cname2)
+
             for l in allColumns[1:]:
                 if not checkCondition(l[ic1], l, cname2, op, allColumns):
                     l[0] = None
@@ -119,7 +179,26 @@ def getSQL():
             # cname21, cname22 = re.findall('[^<=>=!]', cond2)[0:2]
             op1 = re.findall('[<=>=!]', cond1)[0]
             op2 = re.findall('[<=>=!]', cond2)[0]
-            # print(cname1,cname2,op)
+
+            if cname11 not in columnData:
+                print('Unknown column', cname11)
+                return False
+            if cname21 not in columnData:
+                print('Unknown column', cname21)
+                return False
+            if columnData[cname11].tableName not in opTables:
+                print(f'Column {cname11} does not belong to any tables')
+                return False
+            if columnData[cname21].tableName not in opTables:
+                print(f'Column {cname21} does not belong to any tables')
+                return False
+            if op1 not in operators:
+                print('Invalid operation', op1)
+                return False
+            if op2 not in operators:
+                print('Invalid operation', op2)
+                return False
+
             ic11 = (allColumns[0]).index(cname11)
             ic21 = (allColumns[0]).index(cname21)
             for l in allColumns[1:]:
@@ -146,9 +225,14 @@ def getSQL():
         groupByCol = None
     else:
         groupByCol = str(tokens[groupByCol]).strip().lower()
-    # print(groupByCol)
 
     if groupByCol is not None:
+        if groupByCol not in columnData:
+            print('Unknown column', groupByCol)
+            return False
+        if columnData[groupByCol].tableName not in opTables:
+            print(f'Column {groupByCol} does not belong to any tables')
+            return False
         grpIndex = (allColumns[0]).index(groupByCol)
         allColumns = sorted(allColumns[1:], key=lambda x: x[(
             allColumns[0]).index(groupByCol)], reverse=False)
@@ -181,7 +265,7 @@ def getSQL():
     # find count(*)
     if '*' in aggCols.keys() and aggCols['*'] == 'count':
         print('count(*)\n', (len(allColumns)-1))
-        return None
+        return True
 
     if not (len(opCols) == 1 and opCols[0] == '*'):
         i = 0
@@ -246,8 +330,17 @@ def getSQL():
         allColumns.insert(0, allColNames)
 
     # end order by evaluaion
+    for i in range(len(allColumns[0])):
+        if allColumns[0][i] in aggCols:
+            allColumns[0][i] = (aggCols[allColumns[0][i]]
+                                ).upper()+'('+columnData[allColumns[0][i]].tableName+'.'+allColumns[0][i]+')'
+        else:
+            allColumns[0][i] = columnData[allColumns[0]
+                                          [i]].tableName+'.'+allColumns[0][i]
+
     for c in allColumns:
-        print(c)
+        print(*c, sep=',')
+    print(f'\n{len(allColumns)-1} row(s) printed')
 
 
 def aggregate(ll, aggc):
@@ -270,6 +363,9 @@ def checkCondition(no1, ll, id, op, allColumns):
         x = int(id)
         no2 = x
     except Exception:
+        if id not in columnData:
+            print('Unknown column', id)
+            quit()
         no2 = ll[(allColumns[0]).index(id)]
     # print('for',no1,no2,op)
     if op == '=':
@@ -302,8 +398,8 @@ def readTables():
             ll = []
             continue
         ll.append(line.lower())
-    for t in tableList.values():
-        print(f'{t.name}', f'{t.column}')
+    # for t in tableList.values():
+    #     print(f'{t.name}', f'{t.column}')
     # print(tableList)
 
 
@@ -322,7 +418,7 @@ def readTableData():
 
                 for i in range(len(row)):
                     if table.column[i] not in columnData:
-                        cc = Column(table.column[i])
+                        cc = Column(table.name, table.column[i])
                         num = row[i].replace('\'', '')
                         num = num.replace('\"', '')
                         try:
@@ -342,19 +438,14 @@ def readTableData():
                         except ValueError:
                             print(f'Not of type integer {num}')
                 line_count += 1
-            print(f'Processed {line_count} lines for table {table.name}')
-
-    # for table in tableList.values():
-    #     for cols in table.column:
-    #         print(f'Column {cols}', columnData[cols].data)
-    # for x in tableListRows.keys():
-    # 	print(tableListRows[x])
+            #print(f'Processed {line_count} lines for table {table.name}')
 
 
 def main():
     readTables()
     readTableData()
-    getSQL()
+    if verifySQL():
+        getSQL()
 
 
 if __name__ == "__main__":

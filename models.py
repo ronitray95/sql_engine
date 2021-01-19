@@ -17,8 +17,9 @@ class Table:
 
 
 class Column:
-    def __init__(self, name):
+    def __init__(self, table, name):
         self.name = name
+        self.tableName = table
         self.data = []
 
     def addData(self, data: int):
