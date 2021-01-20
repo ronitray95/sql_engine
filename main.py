@@ -40,17 +40,18 @@ def verifySQL():
         if str(t).lower() == 'distinct':
             isDistinct = True
     opTables = (8 if isDistinct else 6)
-    opTables = str(tokens[opTables]).split(',')
+    opTables = [x.strip() for x in str(tokens[opTables]).split(',')]
     opCols = 4 if isDistinct else 2
-    opCols = str(tokens[opCols]).split(',')
+    opCols = [x.strip() for x in str(tokens[opCols]).split(',')]
     if len(opCols) == 0:
         print('No columns are present')
         return False
     if len(opTables) == 0:
         print('No tables are present')
         return False
-    aggCols = {}
+    # print(opCols,opTables)
     for col in opCols:
+        # print(col)
         if '(' not in col:
             if col != '*' and col not in columnData:
                 print('Unknown column', col)
@@ -61,7 +62,7 @@ def verifySQL():
             continue
         agg = re.findall('[^( )]+', col)[0]
         cc = re.findall('[^( )]+', col)[1]
-        opCols.remove(col)
+        # print(cc)
         if cc != '*' and cc not in columnData:
             print('Unknown column', cc)
             return False
@@ -71,7 +72,7 @@ def verifySQL():
         if agg not in functions:
             print('Invalid function', agg)
             return False
-        aggCols[cc] = agg
+
     return True
 
 
@@ -88,19 +89,20 @@ def getSQL():
     for t in tokens:
         if str(t).lower() == 'distinct':
             isDistinct = True
-        #print(t)
+        # print(t)
     opTables = (8 if isDistinct else 6)
-    opTables = str(tokens[opTables]).split(',')
+    opTables = [x.strip() for x in str(tokens[opTables]).split(',')]
     opCols = 4 if isDistinct else 2
-    opCols = str(tokens[opCols]).split(',')
+    opCols = [x.strip() for x in str(tokens[opCols]).split(',')]
     aggCols = {}
-    for col in opCols:
-        if '(' not in col:
+    for i in range(len(opCols)):
+        if '(' not in opCols[i]:
             continue
-        agg = re.findall('[^( )]+', col)[0]
-        cc = re.findall('[^( )]+', col)[1]
-        opCols.remove(col)
+        agg = re.findall('[^( )]+', opCols[i])[0]
+        cc = re.findall('[^( )]+', opCols[i])[1]
+        opCols[i] = None
         aggCols[cc] = agg
+    opCols = [x for x in opCols if x is not None]
     try:
         where = next(token for token in tokens if isinstance(token, Where))
         # print(where)
@@ -150,8 +152,8 @@ def getSQL():
     if condition is not None:
         if cond2 is None:
             cond1 = cond1.replace(';', '')
-            cname1 = re.findall('^[A-Za-z0-9]+', cond1)[0]
-            cname2 = re.findall('[A-Za-z0-9]+$', cond1)[0]
+            cname1 = re.findall('^[A-Za-z0-9_]+', cond1)[0]
+            cname2 = re.findall('[A-Za-z0-9_]+$', cond1)[0]
             op = re.findall('[<=>=!]+', cond1)[0]
 
             if cname1 not in columnData:
@@ -171,15 +173,15 @@ def getSQL():
         else:
             cond1 = cond1.replace(';', '')
             cond2 = cond2.replace(';', '')
-            cname11 = re.findall('^[A-Za-z0-9]+', cond1)[0]
-            cname12 = re.findall('[A-Za-z0-9]+$', cond1)[0]
-            cname21 = re.findall('^[A-Za-z0-9]+', cond2)[0]
-            cname22 = re.findall('[A-Za-z0-9]+$', cond2)[0]
+            cname11 = re.findall('^[A-Za-z0-9_]+', cond1)[0]
+            cname12 = re.findall('[A-Za-z0-9_]+$', cond1)[0]
+            cname21 = re.findall('^[A-Za-z0-9_]+', cond2)[0]
+            cname22 = re.findall('[A-Za-z0-9_]+$', cond2)[0]
             # cname11, cname12 = re.findall('[^<=>=!]', cond1)[0:2]
             # cname21, cname22 = re.findall('[^<=>=!]', cond2)[0:2]
             op1 = re.findall('[<=>=!]', cond1)[0]
             op2 = re.findall('[<=>=!]', cond2)[0]
-
+            
             if cname11 not in columnData:
                 print('Unknown column', cname11)
                 return False
@@ -264,7 +266,7 @@ def getSQL():
 
     # find count(*)
     if '*' in aggCols.keys() and aggCols['*'] == 'count':
-        print('count(*)\n', (len(allColumns)-1))
+        print('<count(*)>\n', (len(allColumns)-1))
         return True
 
     if not (len(opCols) == 1 and opCols[0] == '*'):
@@ -337,9 +339,12 @@ def getSQL():
         else:
             allColumns[0][i] = columnData[allColumns[0]
                                           [i]].tableName+'.'+allColumns[0][i]
-
+    print('<', end='')
     for c in allColumns:
-        print(*c, sep=',')
+        print(*c, sep=',', end='')
+        if allColumns.index(c) == 0:
+            print('>', end='')
+        print()
     print(f'\n{len(allColumns)-1} row(s) printed')
 
 
