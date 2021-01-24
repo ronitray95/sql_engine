@@ -128,7 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-metadata.txt
-sample_output.txt
+*.txt
 *.csv
 *.pdf
+*.sh

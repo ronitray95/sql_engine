@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 
-import csv
-import sqlparse
-import sys
 import copy
-from models import *
+import csv
+import os
+import re
+import sys
+
+import sqlparse
+from sqlparse import *
 from sqlparse.sql import *
 from sqlparse.tokens import *
-from sqlparse import *
-import re
+
+from models import *
+
 tableList = {}
 tableListRows = {}  # map of table rows
 columnData = {}
@@ -181,7 +185,7 @@ def getSQL():
             # cname21, cname22 = re.findall('[^<=>=!]', cond2)[0:2]
             op1 = re.findall('[<=>=!]', cond1)[0]
             op2 = re.findall('[<=>=!]', cond2)[0]
-            
+
             if cname11 not in columnData:
                 print('Unknown column', cname11)
                 return False
@@ -266,7 +270,7 @@ def getSQL():
 
     # find count(*)
     if '*' in aggCols.keys() and aggCols['*'] == 'count':
-        print('<count(*)>\n', (len(allColumns)-1))
+        print('count(*)\n', (len(allColumns)-1))
         return True
 
     if not (len(opCols) == 1 and opCols[0] == '*'):
@@ -290,14 +294,33 @@ def getSQL():
                 for col in allColumns:
                     del(col[index])
 
+    # for c in allColumns:
+    #     print(*c, sep=',', end='')
+    #     print()
+
     if groupByCol is not None:
         for j in range(len(allColumns[0])):
             for i in range(1, len(allColumns)):
-                if allColumns[0][j] in aggCols:
+                if allColumns[0][j] in aggCols and allColumns[0][j] != groupByCol:
                     allColumns[i][j] = aggregate(
                         allColumns[i][j], aggCols[allColumns[0][j]])
                 elif isinstance(allColumns[i][j], list):
                     allColumns[i][j] = allColumns[i][j][0]
+                elif allColumns[0][j] == groupByCol and allColumns[0][j] in aggCols:
+                    allColumns[i][j] = findColData(
+                        groupByCol, allColumns[i][j], aggCols[groupByCol])
+    elif len(aggCols) != 0:
+        for j in range(len(allColumns[0])):
+            if allColumns[0][j] in aggCols:
+                newlist = []
+                for i in range(1, len(allColumns)):
+                    newlist.append(allColumns[i][j])
+                # print(newlist)
+                allColumns[1][j] = aggregate(
+                    newlist, aggCols[allColumns[0][j]])
+                # print(allColumns[i][j])
+        allColumns = allColumns[0:2]
+
     # end select evaluation
 
     # start distinct evaluation
@@ -339,13 +362,13 @@ def getSQL():
         else:
             allColumns[0][i] = columnData[allColumns[0]
                                           [i]].tableName+'.'+allColumns[0][i]
-    print('<', end='')
+    #print('<', end='')
     for c in allColumns:
         print(*c, sep=',', end='')
-        if allColumns.index(c) == 0:
-            print('>', end='')
+        # if allColumns.index(c) == 0:
+        #     print('>', end='')
         print()
-    print(f'\n{len(allColumns)-1} row(s) printed')
+    #print(f'\n{len(allColumns)-1} row(s) printed')
 
 
 def aggregate(ll, aggc):
@@ -360,6 +383,30 @@ def aggregate(ll, aggc):
     elif aggc == 'avg':
         return sum(ll) / len(ll)
     return ll[0]
+
+
+def findColData(col, val, aggc):
+    cc = columnData[col]
+
+    if aggc == 'max':
+        return val
+    elif aggc == 'min':
+        return val
+    elif aggc == 'sum':
+        f = 0
+        for c in cc.data:
+            if c == val:
+                f += 1
+        return f*val
+    elif aggc == 'count':
+        f = 0
+        for c in cc.data:
+            if c == val:
+                f += 1
+        return f
+    elif aggc == 'avg':
+        return val
+    return val
 
 
 def checkCondition(no1, ll, id, op, allColumns):
@@ -388,6 +435,9 @@ def checkCondition(no1, ll, id, op, allColumns):
 def readTables():
     #t = Table('t1')
     ll = []
+    if not os.path.exists('metadata.txt'):
+        print(f'File metadata.txt not found')
+        quit()
     f = open('metadata.txt').readlines()
     # print(f)
     for line in f:
@@ -410,6 +460,9 @@ def readTables():
 
 def readTableData():
     for table in tableList.values():
+        if not os.path.exists(table.name+'.csv'):
+            print(f'File {table.name}.csv not found')
+            quit()
         with open(table.name+'.csv') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
@@ -449,8 +502,11 @@ def readTableData():
 def main():
     readTables()
     readTableData()
-    if verifySQL():
-        getSQL()
+    try:
+        if verifySQL():
+            getSQL()
+    except Exception as e:
+        print('Incorrect query')
 
 
 if __name__ == "__main__":
